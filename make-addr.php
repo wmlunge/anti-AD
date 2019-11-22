@@ -23,6 +23,10 @@ $arr_result = array_merge_recursive($arr_result, makeAddr::get_domain_from_easyl
 $easylist2 = file_get_contents('./cjx-annoyance.txt');
 $arr_result = array_merge_recursive($arr_result, makeAddr::get_domain_from_easylist($easylist2));
 
+$easylist3 = file_get_contents('./fanboy-annoyance.txt');
+$arr_result = array_merge_recursive($arr_result, makeAddr::get_domain_from_easylist($easylist3));
+
+
 $host1 = file_get_contents('./hosts1');
 $arr_result = array_merge_recursive($arr_result, makeAddr::get_domain_list($host1));
 
@@ -30,10 +34,13 @@ $arr_result = array_merge_recursive($arr_result, makeAddr::get_domain_list($host
 $host2 = file_get_contents('./hosts2');
 $arr_result = array_merge_recursive($arr_result, makeAddr::get_domain_list($host2));
 
+$host3 = file_get_contents('./hosts3');
+$arr_result = array_merge_recursive($arr_result, makeAddr::get_domain_list($host3));
+
 $arr_result = array_merge_recursive($arr_result, $arr_blacklist);
 
 echo 'Written file size:';
-echo makeAddr::write_to_conf($arr_result, './adblock-for-dnsmasq.conf');
+echo makeAddr::write_to_conf($arr_result, './adblock-for-dnsmasq.conf', 'q-filter.conf');
 
 
 
@@ -53,7 +60,7 @@ class makeAddr{
 		$result = curl_exec($ch);
 		$errno = curl_errno($ch);
 		curl_close($ch);
-	
+
 		return $result;
 	}
 
@@ -113,14 +120,14 @@ class makeAddr{
 				}else{
 					$row = $matchs[1];
 				}
-				
+
 				$arr_domains[self::extract_main_domain($matchs[1])][] = $row;
 			}
 		}
 
 		return $arr_domains;
 	}
-	
+
 	public static function get_domain_list($str_hosts){
 		$strlen = strlen($str_hosts);
 		if($strlen < 10){
@@ -140,28 +147,33 @@ class makeAddr{
 			}
 			$line = strtolower(preg_replace('/[\s\t]+/', "/", $line));
 
-			if((strpos($line, '127.0.0.1') === false) && 
-				(strpos($line, '::') === false) && 
+			if((strpos($line, '127.0.0.1') === false) &&
+				(strpos($line, '::') === false) &&
 				(strpos($line, '0.0.0.0') === false)){
 				continue;
 			}
-		
+
 			$row = explode('/', $line);
 			if(strpos($row[1], '.') === false){
 				continue;
 			}
-			
+
 			$arr_domains[self::extract_main_domain($row[1])][] = $row[1];
 		}
 
 		return $arr_domains;
 	}
 
-	public static function write_to_conf($arr_result, $str_file){
+	public static function write_to_conf($arr_result, $str_file, $q_file){
 
 		$fp = fopen($str_file, 'w');
+		$fp2 = fopen($q_file, 'w');
 		$write_len = fwrite($fp, '#TIME=' . date('YmdHis'). "\n");
 		$write_len += fwrite($fp, '#URL=https://github.com/gentlyxu/anti-AD' . "\n");
+		fwrite($fp2, '[TCP]' . "\n");
+		fwrite($fp2, 'USER-AGENT,com.apple.*,DIRECT' . "\n");
+		fwrite($fp2, 'USER-AGENT,FindMy*,DIRECT' . "\n");
+		fwrite($fp2, 'USER-AGENT,Maps*,DIRECT' . "\n");
 
 		foreach($arr_result as $rk => $rv){
 
@@ -179,6 +191,7 @@ class makeAddr{
 					continue;
 				}
 				$write_len += fwrite($fp, 'address=/' . $rv . '/' . "\n");
+				fwrite($fp2, 'HOST-SUFFIX,' . $rv . ',REJECT' . "\n");
 				continue;
 			}
 
@@ -186,6 +199,7 @@ class makeAddr{
 
 			if(in_array('.' . $rk, $rv) || in_array('www.' . $rk, $rv) || in_array($rk, $rv)){
 				$write_len += fwrite($fp, 'address=/' . $rk . '/' . "\n");
+				fwrite($fp2, 'HOST-SUFFIX,' . $rk . ',REJECT' . "\n");
 				continue;
 			}
 
@@ -205,10 +219,11 @@ class makeAddr{
 						if(in_array(implode('.', $tmp_arr2), $rv)){
 							if(!in_array(implode('.', $tmp_arr2), $arr_written)){
 								$arr_written[] = implode('.', $tmp_arr2);
-                                if(array_key_exists(implode('.', $tmp_arr2), $GLOBALS['arr_whitelist'])){
-                                    continue;
-                                }
+								if(array_key_exists(implode('.', $tmp_arr2), $GLOBALS['arr_whitelist'])){
+									continue;
+								}
 								$write_len += fwrite($fp, 'address=/' . implode('.', $tmp_arr2) . '/' . "\n");
+								fwrite($fp2, 'HOST-SUFFIX,' . implode('.', $tmp_arr2) . ',REJECT' . "\n");
 							}
 							$written_flag = true;
 							break;
@@ -222,40 +237,13 @@ class makeAddr{
 
 				$arr_written[] = $rvv;
 				$write_len += fwrite($fp, 'address=/' . $rvv . '/' . "\n");
+				fwrite($fp2, 'HOST-SUFFIX,' . $rvv . ',REJECT' . "\n");
 			}
 		}
 
 		fclose($fp);
+		fclose($fp2);
 
 		return $write_len;
 	}
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
